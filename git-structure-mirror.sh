@@ -43,3 +43,5 @@ function repo_get_actionable_refs {
   cat <(git "${repo}" for-each-ref --format='%(refname)' 'refs/heads') \
       <(git "${repo}" for-each-ref --format='%(refname)' 'refs/tags')
 }
+
+repo_get_actionable_refs "${src_git}"
