@@ -4,8 +4,8 @@ set -Eeuxo pipefail
 # Copyright 2022, Gaurav Juvekar
 # SPDX-License-Identifier: MIT
 
-src_git="--git-dir=$1"
-dst_git="$2"
+src_git="--git-dir=$1/.git"
+dst_git="--git-dir=$2/.git"
 
 notes_src_template='Structure-mirror-commit: '
 commit_dst_template='Source-commit: '
