@@ -10,6 +10,7 @@ dst_git="--git-dir=$2/.git"
 notes_src_template='Structure-mirror-commit: '
 commit_dst_template='Source-commit: '
 
+src_already_mirrored=$(mktemp)
 
 function pcre_escape {
   sed 's/[^\^]/[&]/g;s/[\^]/\\&/g' <<< "$*"
@@ -57,6 +58,56 @@ function filter_ref_if_changed {
 
 function commit_mirror {
   local src_commit="$1"
+
+  # Remove all ancestors that are already mirrored
+  while true
+  do
+    local found_excludes=$(false ; echo $?)
+    git "${src_git}" rev-list --sparse --full-history --topo-order \
+      "${src_commit}" $(cat "${src_already_mirrored}") | \
+      while read commit
+      do
+        if src_commit_to_dst "${commit}"
+        then
+          found_excludes=$(true ; echo $?)
+          echo "^${commit}" >> "${src_already_mirrored}"
+          break
+        fi
+      done
+      if [ ! ${found_excludes} ]
+      then
+        break
+      fi
+  done
+
+
+  # The resulting commit set can be mirrored in reverse-topo-order
+  git "${src_git}" rev-list --sparse --full-history --reverse --topo-order \
+    "${src_commit}" $(cat "${src_already_mirrored}") | \
+    while read commit
+    do
+      local src_parents=$(git "${src_git}" show --format='%P' "${commit}" | \
+        head -n1 | tr ' ' '\n')
+      local dst_parents="$(cat "${src_parents}" | \
+        while read commit
+        do
+          src_commit_to_dst "${commit}"
+        done)"
+
+      local dst_commit=$(git "${dst_git}" commit-tree $(cat "${dst_parents}" | \
+        while read parent
+        do
+          echo -n '' -p "${parent}" ''
+        done) \
+          $(git "${dst_git}" write-tree) \
+          -m  "$(echo "${commit_dst_template} ${commit}")")
+
+        git "${src_git}" notes append \
+          -m $(echo "${notes_src_template} ${dst_commit}") \
+          "${commit}"
+    done
+
+  src_commit_to_dst "${src_commit}"
 }
 
 function ref_mirror {
@@ -67,7 +118,7 @@ function ref_mirror {
 
   git "${dst_git}" update-ref "${ref}" "${dst_commit}"
 
-  # TODO add to global src_already_mirrored
+  echo "^${src_commit}" >> "${src_already_mirrored}"
 }
 
 
