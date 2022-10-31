@@ -44,4 +44,57 @@ function repo_get_actionable_refs {
       <(git "${repo}" for-each-ref --format='%(refname)' 'refs/tags')
 }
 
-repo_get_actionable_refs "${src_git}"
+function filter_ref_if_changed {
+  while read ref
+  do
+    if [ "x$(git ${src_git} show-ref -s ${ref})" != \
+         "x$(dst_commit_to_src $(git ${dst_git} show-ref -s ${ref}))" ]
+    then
+      echo ${ref}
+    fi
+  done
+}
+
+function commit_mirror {
+  local src_commit="$1"
+}
+
+function ref_mirror {
+  local ref="$1"
+
+  local src_commit="$(git "${src_git}" show-ref -s "${ref}")"
+  local dst_commit="$(commit_mirror "${src_commit}")"
+
+  git "${dst_git}" update-ref "${ref}" "${dst_commit}"
+
+  # TODO add to global src_already_mirrored
+}
+
+
+configure_src
+
+
+# Delete refs that don't exist in src
+comm -13 <(repo_get_actionable_refs "${src_git}") \
+         <(repo_get_actionable_refs "${dst_git}") | \
+  while read ref
+  do
+    git "${dst_git}" update-ref --delete "${ref}"
+  done
+
+# For common refs, mirror refs in dst that have changed
+comm -12 <(repo_get_actionable_refs "${src_git}") \
+         <(repo_get_actionable_refs "${dst_git}") | \
+  filter_ref_if_changed  | \
+  while read ref
+  do
+    ref_mirror "${ref}"
+  done
+
+#Now add missing refs
+comm -23 <(repo_get_actionable_refs "${src_git}") \
+         <(repo_get_actionable_refs "${dst_git}") | \
+  while read ref
+  do
+    ref_mirror "${ref}"
+  done
