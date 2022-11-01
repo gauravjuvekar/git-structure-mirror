@@ -1,5 +1,5 @@
 #!/bin/bash
-# set -Eeuxo pipefail
+set -Eexo pipefail
 
 # Copyright 2022, Gaurav Juvekar
 # SPDX-License-Identifier: MIT
@@ -13,8 +13,12 @@ commit_dst_template='Source-commit: '
 src_already_mirrored=$(mktemp)
 
 function pcre_escape {
-  sed 's/[^\^]/[&]/g;s/[\^]/\\&/g' <<< "$*"
+  perl -s -0777 -e \
+    "use MIME::Base64; print quotemeta(decode_base64('$(echo -ne "$1" | base64)'));"
 }
+
+esc_notes_src_template="$(pcre_escape "${notes_src_template}")"
+esc_commit_dst_template="$(pcre_escape "${commit_dst_template}")"
 
 function configure_src {
   git "${src_git}" config --local notes.rewrite.amend false
@@ -30,13 +34,13 @@ function repo_commit_exists {
 function src_commit_to_dst {
   local src_commit="$1"
   git "${src_git}" notes show "${src_commit}" 2>/dev/null | \
-    grep -Po '(?<=^'"$(pcre_escape "${notes_src_template}")"')[0-9a-f]{40}'
+    grep -Po "(?<=^${esc_notes_src_template})[0-9a-f]{40}"
 }
 
 function dst_commit_to_src {
   local dst_commit="$1"
   git "${dst_git}" cat-file -p "${dst_commit}" | \
-    grep -Po '(?<=^'"$(pcre_escape "${commit_dst_template}")"')[0-9a-f]{40}'
+    grep -Po "(?<=^${esc_commit_dst_template})[0-9a-f]{40}"
 }
 
 function repo_get_actionable_refs {
