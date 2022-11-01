@@ -1,5 +1,5 @@
 #!/bin/bash
-set -Eeuxo pipefail
+# set -Eeuxo pipefail
 
 # Copyright 2022, Gaurav Juvekar
 # SPDX-License-Identifier: MIT
@@ -29,7 +29,7 @@ function repo_commit_exists {
 
 function src_commit_to_dst {
   local src_commit="$1"
-  git "${src_git}" notes show "${src_commit}" | \
+  git "${src_git}" notes show "${src_commit}" 2>/dev/null | \
     grep -Po '(?<=^'"$(pcre_escape "${notes_src_template}")"')[0-9a-f]{40}'
 }
 
@@ -59,59 +59,70 @@ function filter_ref_if_changed {
 function commit_mirror {
   local src_commit="$1"
 
+  echo Mirroring "${src_commit}" >&2
+
   # Remove all ancestors that are already mirrored
-  while true
+  tmp_rev_list="$(mktemp)"
+  local found_excludes=true
+  while ${found_excludes}
   do
-    local found_excludes=false
+    found_excludes=false
+
     git "${src_git}" rev-list --sparse --full-history --topo-order \
-      "${src_commit}" $(cat "${src_already_mirrored}") | \
-      while read commit
-      do
-        if src_commit_to_dst "${commit}"
-        then
-          found_excludes=true
-          echo "^${commit}" >> "${src_already_mirrored}"
-          break
-        fi
-      done
-      if $found_excludes
+      "${src_commit}" $(cat "${src_already_mirrored}") > "${tmp_rev_list}"
+
+    local len_rev_list=$(wc -l < "${tmp_rev_list}")
+    echo Finding excludes in "${src_commit}" >&2
+    pv -l -B41 -s "${len_rev_list}" "${tmp_rev_list}" | while read commit
+    do
+      # echo "Checking ${commit}" >&2
+      if src_commit_to_dst "${commit}"
       then
+        found_excludes=true
+        echo "Already mirrored: ${commit}" >&2
+        echo "^${commit}" >> "${src_already_mirrored}"
         break
       fi
+    done
   done
 
 
   # The resulting commit set can be mirrored in reverse-topo-order
   git "${src_git}" rev-list --sparse --full-history --reverse --topo-order \
-    "${src_commit}" $(cat "${src_already_mirrored}") | \
-    while read commit
-    do
-      local src_parents=$(git "${src_git}" show --format='%P' "${commit}" | \
-        head -n1 | tr ' ' '\n')
-      local dst_parents="$(cat "${src_parents}" | \
-        while read commit
-        do
-          src_commit_to_dst "${commit}"
-        done)"
+    "${src_commit}" $(cat "${src_already_mirrored}") > "${tmp_rev_list}"
 
-      local dst_commit=$(git "${dst_git}" commit-tree $(cat "${dst_parents}" | \
-        while read parent
-        do
-          echo -n '' -p "${parent}" ''
-        done) \
-          $(git "${dst_git}" write-tree) \
-          -m  "$(echo "${commit_dst_template} ${commit}")")
+  len_rev_list=$(wc -l < "${tmp_rev_list}")
+  echo Mirroring ${len_rev_list} commits >&2
 
-        git "${src_git}" notes append \
-          -m $(echo "${notes_src_template} ${dst_commit}") \
-          "${commit}"
-    done
+  pv -l -B41 -s ${len_rev_list} "${tmp_rev_list}" | while read commit
+  do
+    read -a src_parents <<< "$(git "${src_git}" show --format='%P' "${commit}" | \
+      head -n1)"
+    local dst_parents=$(for sp in ${src_parents[@]};\
+                        do src_commit_to_dst ${sp} ;\
+                        done)
 
+    local dst_commit=$(\
+      git "${dst_git}" commit-tree \
+        $(for dp in ${dst_parents[@]};\
+          do echo -n '' -p "${dp}"   ;\
+          done) \
+        $(git "${dst_git}" write-tree) \
+        -m "${commit_dst_template}${commit}")
+
+    git "${src_git}" notes append \
+      -m "${notes_src_template}${dst_commit}" \
+      "${commit}"
+  done
+
+  rm "${tmp_rev_list}"
   src_commit_to_dst "${src_commit}"
 }
 
 function ref_mirror {
   local ref="$1"
+
+  echo Mirroring "${ref}" >&2
 
   local src_commit="$(git "${src_git}" show-ref -s "${ref}")"
   local dst_commit="$(commit_mirror "${src_commit}")"
