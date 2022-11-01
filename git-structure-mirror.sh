@@ -62,19 +62,19 @@ function commit_mirror {
   # Remove all ancestors that are already mirrored
   while true
   do
-    local found_excludes=$(false ; echo $?)
+    local found_excludes=false
     git "${src_git}" rev-list --sparse --full-history --topo-order \
       "${src_commit}" $(cat "${src_already_mirrored}") | \
       while read commit
       do
         if src_commit_to_dst "${commit}"
         then
-          found_excludes=$(true ; echo $?)
+          found_excludes=true
           echo "^${commit}" >> "${src_already_mirrored}"
           break
         fi
       done
-      if [ ! ${found_excludes} ]
+      if $found_excludes
       then
         break
       fi
