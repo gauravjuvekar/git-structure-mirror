@@ -1,8 +1,10 @@
 #!/bin/bash
-set -Eexo pipefail
-
 # Copyright 2022, Gaurav Juvekar
 # SPDX-License-Identifier: MIT
+
+
+# set -Eexo pipefail
+
 
 src_git="--git-dir=$1/.git"
 dst_git="--git-dir=$2/.git"
@@ -23,6 +25,13 @@ esc_commit_dst_template="$(pcre_escape "${commit_dst_template}")"
 function configure_src {
   git "${src_git}" config --local notes.rewrite.amend false
   git "${src_git}" config --local notes.rewrite.rebase false
+}
+
+
+function repo_ref_to_commit {
+  local repo="$1"
+  local ref="$2"
+  git "${repo}" show-ref -d -s "${ref}" | tail -n1 | cut -f1 -d' '
 }
 
 function repo_commit_exists {
@@ -52,8 +61,8 @@ function repo_get_actionable_refs {
 function filter_ref_if_changed {
   while read ref
   do
-    if [ "x$(git ${src_git} show-ref -s ${ref})" != \
-         "x$(dst_commit_to_src $(git ${dst_git} show-ref -s ${ref}))" ]
+    if [ "x$(repo_ref_to_commit "${src_git}" "${ref}")" != \
+         "x$(dst_commit_to_src $(repo_ref_to_commit "${dst_git}" "${ref}"))" ]
     then
       echo ${ref}
     fi
@@ -128,7 +137,7 @@ function ref_mirror {
 
   echo Mirroring "${ref}" >&2
 
-  local src_commit="$(git "${src_git}" show-ref -s "${ref}")"
+  local src_commit="$(repo_ref_to_commit "${src_git}" "${ref}")"
   local dst_commit="$(commit_mirror "${src_commit}")"
 
   git "${dst_git}" update-ref "${ref}" "${dst_commit}"
