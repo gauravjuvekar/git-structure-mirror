@@ -15,7 +15,7 @@ commit_dst_template='Source-commit: '
 src_already_mirrored=$(mktemp)
 
 function pcre_escape {
-  perl -s -0777 -e \
+  perl -e \
     "use MIME::Base64; print quotemeta(decode_base64('$(echo -ne "$1" | base64)'));"
 }
 
