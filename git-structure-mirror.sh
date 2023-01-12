@@ -89,7 +89,7 @@ function commit_mirror {
     pv -l -B41 -s "${len_rev_list}" "${tmp_rev_list}" | while read commit
     do
       # echo "Checking ${commit}" >&2
-      if src_commit_to_dst "${commit}"
+      if src_commit_to_dst "${commit}" > /dev/null
       then
         found_excludes=true
         echo "Already mirrored: ${commit}" >&2
