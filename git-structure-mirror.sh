@@ -166,7 +166,7 @@ comm -12 <(repo_get_actionable_refs "${src_git}") \
     ref_mirror "${ref}"
   done
 
-#Now add missing refs
+# Now add missing refs
 comm -23 <(repo_get_actionable_refs "${src_git}") \
          <(repo_get_actionable_refs "${dst_git}") | \
   while read ref
