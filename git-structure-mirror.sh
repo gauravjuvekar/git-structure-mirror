@@ -154,7 +154,7 @@ comm -13 <(repo_get_actionable_refs "${src_git}") \
          <(repo_get_actionable_refs "${dst_git}") | \
   while read ref
   do
-    git "${dst_git}" update-ref --delete "${ref}"
+    git "${dst_git}" update-ref -d "${ref}"
   done
 
 # For common refs, mirror refs in dst that have changed
